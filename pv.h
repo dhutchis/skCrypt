@@ -7,6 +7,7 @@
 void ri (void);
 char *import_sk_from_file (char **raw_sk_p, size_t *raw_len_p, int fdsk);
 int write_chunk (int fd, const char *buf, u_int len);
+void xor_buffers(void *dst, const void *a, const void *b, size_t len);
 
 #ifndef HAVE_GETPROGNAME
 # define MY_MAXNAME 80

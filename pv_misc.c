@@ -160,7 +160,8 @@ import_sk_from_file (char **raw_sk_p, size_t *raw_len_p, int fdsk)
     *raw_sk_p = (char *) malloc (dearmored_len * sizeof (char));
     dearmor64 (*raw_sk_p, armored_key);
   }    
-
+  bzero(armored_key, strlen(armored_key)); /* SCRUB & FREE ARMORED KEY */
+  free(armored_key);
   return (*raw_sk_p);
 }
 
@@ -182,3 +183,13 @@ write_chunk (int fd, const char *buf, u_int len)
 
   return 0;
 }
+
+/* assert a,b,dst have at least len bytes allocated */
+void
+xor_buffers(void *dst, const void *a, const void *b, size_t len)
+{
+  while (len--)
+    *((char*)dst++) = *((char*)a++) ^ *((char*)b++);
+}
+
+    

@@ -55,7 +55,7 @@ encrypt_file (const char *ctxt_fname, void *raw_sk, size_t raw_len, int fin)
    * so it can be world-readable! */
   int fctxt = open(ctxt_fname, O_WRONLY | O_TRUNC | O_CREAT, 0644);
   if (fctxt == -1) {
-    perror("encrypt_file: error opening ctxt");
+    perror("encrypt_file: error opening ctxt file");
     return;
   }
 
@@ -104,7 +104,7 @@ encrypt_file (const char *ctxt_fname, void *raw_sk, size_t raw_len, int fin)
     free(cprev);
     return;
   }
-  int numread = read(fin, bufin, sk_len);
+  int numread = read(fin, bufin, sk_len); /* first ptxt read */
   u_int32_t numpad0 = 0u; 	/* number of 0-pad bits */
 
   while (numread > 0) {

@@ -35,16 +35,117 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
    * will encounter the end-of-file, at which point we will know where Y ends,
    * and how to finish reading the last bytes of the ciphertext.
    */
+  int i;
+  /* Create plaintext file---may be confidential info, so permission is 0600 */
+  int fptxt = open(ptxt_fname, O_RDWR | O_TRUNC | O_CREAT, 0600); /* RDWR for ftruncate */
+  if (fptxt == -1) {
+    perror("encrypt_file: error opening ptxt file");
+    return;
+  }
 
   /* use the first part of the symmetric key for the CBC-AES decryption ...*/
   /* ... and the second for the HMAC-SHA1 */
+  assert(raw_len % 2 == 0);  /* really should be == 2*CCA_STRENGTH */
+  const size_t sk_len = raw_len / 2;
+  const char *sk_aes = (const char*)raw_sk;
+  /* ... and the second part for the HMAC-SHA1 */
+  const char *sk_hmac = (const char*)raw_sk+sk_len;
 
   /* Reading Y */
   /* First, read the IV (Initialization Vector) */
+  char *cprev = (char*)malloc(sk_len * sizeof(char));
+  if (!cprev) {
+    fprintf(stderr, "decrypt_file: Cannot allocate %zu bytes\n",sk_len);
+    close(fptxt); unlink(ptxt_fname);
+    return;
+  }
+  int numread = read(fin, cprev, sk_len); /* read IV */
+  if (numread == -1 || (unsigned)numread < sk_len) {
+    if (numread == -1) perror(0);
+    fprintf(stderr,"decrypt_file: ctxt file is too short or read error\n");
+    close(fptxt); unlink(ptxt_fname);
+    free(cprev);
+    return;
+  }
 
   /* compute the HMAC-SHA1 as you go */
+  struct sha1_ctx hmac_s;	/* init HMAC */
+  hmac_sha1_init(sk_hmac, sk_len, &hmac_s);
+  hmac_sha1_update(&hmac_s, cprev, sk_len);
+  
+  struct aes_ctx aes_s;		/* init AES */
+  aes_setkey(&aes_s, sk_aes, sk_len);
 
-  /* Create plaintext file---may be confidential info, so permission is 0600 */
+  char *bufin = (char*)malloc((sk_len+21) * sizeof(char)); /* buffer to hold chunks of ctxt+21 */
+  char *bufptxt = (char*)malloc(sk_len * sizeof(char));	   /* buffer to hold chunks of ptxt */
+  if (!bufin || !bufptxt) {
+    fprintf(stderr, "decrypt_file: Cannot allocate memory\n");
+    aes_clrkey(&aes_s);
+    close(fptxt); unlink(ptxt_fname);
+    free(cprev); if (bufptxt) free(bufptxt);
+    if (bufin) free(bufin);
+    return;
+  }
+  numread = read(fin, bufin, 21); /* first long read */
+  if (numread < 21) {
+    if (numread == -1) perror(0);
+    fprintf(stderr,"decrypt_file: ctxt file is too short or read error\n");
+    aes_clrkey(&aes_s);
+    close(fptxt); unlink(ptxt_fname);
+    free(cprev); free(bufin); free(bufptxt);
+    return;
+  }
+  numread = read(fin, bufin+21, sk_len); /* finish first read */
+
+  while ((unsigned)numread == sk_len) { 	/* while we read a full block */
+    aes_decrypt(&aes_s, bufptxt, bufin);           /* bufptxt := AES'(bufin[0..sk_len]) */
+    xor_buffers(bufptxt, bufptxt, cprev, sk_len);  /* bufptxt := bufptxt ^ cprev */
+    memcpy(cprev, bufin, sk_len);		   /* cprev := bufin[0..sk_len] */
+    hmac_sha1_update(&hmac_s, cprev, sk_len);	   /* update HMAC with new ctxt */
+    for (i=0; i < 21; i++)                     /* SHIFT bufin[sk_len..sk_len+21] to beginning*/
+      bufin[i] = bufin[i+sk_len];
+    if (write_chunk(fptxt, bufptxt, sk_len) != 0){ /* writeout ptxt block */
+      fprintf(stderr,"decrypt_file: error writing to %s\n",ptxt_fname);
+      aes_clrkey(&aes_s);
+      close(fptxt); unlink(ptxt_fname);
+      free(cprev); free(bufin); free(bufptxt);
+      return;
+    }
+    numread = read(fin, bufin+21, sk_len);        /* read next ctxt */
+  }
+  /* numread == 0 is normal EOF */
+  if (numread != 0) {
+    if (numread == -1) perror("decrypt_file: error reading ctx file");
+    else fprintf(stderr,"decrypt_file: ctxt file has bad size (not multiple of block length)\n");
+    aes_clrkey(&aes_s);
+    close(fptxt); unlink(ptxt_fname);
+    free(cprev); free(bufin); free(bufptxt);
+    return;
+  }
+
+  aes_clrkey(&aes_s);
+  /* bufin[0..21] holds the HMAC + numpad0 and bufptxt holds last block (possible extra 0s) */
+  hmac_sha1_final(sk_hmac, sk_len, &hmac_s, (u_char*)cprev); /* cprev := computed HMAC */
+  for (i=0; (unsigned)i < sk_len; i++)
+    if (bufin[i] != cprev[i]) { /* mismatch! */
+      printf("WARNING: HMAC MISMATCH. Check key and ciphertext integrity.\n");
+      close(fptxt); unlink(ptxt_fname);
+      free(cprev); free(bufin); free(bufptxt);
+      return;
+    }
+  
+  /* now let's fix those last 0s */
+  u_int32_t numpad0 = getint(bufin+20);
+  printf("numpad0= %u\n", numpad0);
+  if (numpad0 > 0) {
+    if (ftruncate(fptxt, lseek(fptxt, -numpad0, SEEK_CUR)) != 0) 
+      perror("decrypt_file: error truncating ptxt file to remove excess 0s");
+  }
+  
+  close(fptxt);
+  free(cprev);
+  free(bufin);
+  free(bufptxt);
 
   /* CBC (Cipher-Block Chaining)---Decryption
    * decrypt the current block and xor it with the previous one 
@@ -93,8 +194,8 @@ int
 main (int argc, char **argv)
 {
   int fdsk, fdctxt;
-  char *sk = NULL;
-  size_t sk_len = 0;
+  char *raw_sk = NULL;
+  size_t raw_len = 0;
 
   if (argc != 4) {
     usage (argv[0]);
@@ -105,8 +206,7 @@ main (int argc, char **argv)
       usage (argv[0]);
     }
     else {
-      perror (argv[0]);
-      
+      perror (argv[0]);      
       exit (-1);
     }
   }   
@@ -114,20 +214,19 @@ main (int argc, char **argv)
     setprogname (argv[0]);
 
     /* Import symmetric key from argv[1] */
-    if (!(sk = import_sk_from_file (&sk, &sk_len, fdsk))) {
+    if (!(raw_sk = import_sk_from_file (&raw_sk, &raw_len, fdsk))) {
       printf ("%s: no symmetric key found in %s\n", argv[0], argv[1]);
-      
       close (fdsk);
       exit (2);
     }
     close (fdsk);
 
     /* Enough setting up---let's get to the crypto... */
-    decrypt_file (argv[3], sk, sk_len, fdctxt);    
+    decrypt_file (argv[3], raw_sk, raw_len, fdctxt);    
 
     /* scrub the buffer that's holding the key before exiting */
-
-    /* YOUR CODE HERE */
+    bzero(raw_sk, raw_len);
+    free(raw_sk);
 
     close (fdctxt);
   }

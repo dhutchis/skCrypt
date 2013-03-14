@@ -157,6 +157,7 @@ encrypt_file (const char *ctxt_fname, void *raw_sk, size_t raw_len, int fin)
   }
   printf("wrote %d\n",20);
   putint(bufin, numpad0); 	/* cross-platform stability */
+  printf("numpad0: %u\n",numpad0);
   if (write_chunk(fctxt, bufin, 4) != 0) {
     fprintf(stderr,"encrypt_file: error writing last 4 bytes to %s\n", ctxt_fname);
     close(fctxt); unlink(ctxt_fname);
@@ -217,6 +218,7 @@ main (int argc, char **argv)
     close (fdsk);
 
     /* Enough setting up---let's get to the crypto... */
+    printf("raw_len: %zu\n",raw_len);
     encrypt_file (argv[3], raw_sk, raw_len, fdptxt);    
 
     /* scrub the buffer that's holding the key before exiting */

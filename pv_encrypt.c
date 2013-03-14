@@ -94,6 +94,7 @@ encrypt_file (const char *ctxt_fname, void *raw_sk, size_t raw_len, int fin)
     free(cprev);
     return;
   }
+  printf("wrote %d\n",(int)sk_len);
   hmac_sha1_update(&hmac_s, cprev, sk_len);
 
   char *bufin = (char*)malloc(sk_len * sizeof(char)); /* buffer to hold chunks of plaintext */
@@ -124,6 +125,7 @@ encrypt_file (const char *ctxt_fname, void *raw_sk, size_t raw_len, int fin)
       free(cprev); free(bufin);
       return;
     }
+    printf("wrote %d\n",(int)sk_len);
     
     numread = read(fin, bufin, sk_len);
   }
@@ -147,12 +149,13 @@ encrypt_file (const char *ctxt_fname, void *raw_sk, size_t raw_len, int fin)
     return;
   }
   hmac_sha1_final(sk_hmac, sk_len, &hmac_s, (u_char*)bufin);
-  if (write_chunk(fctxt, bufin, sk_len) != 0) {
+  if (write_chunk(fctxt, bufin, 20) != 0) {
     fprintf(stderr,"encrypt_file: error writing HMAC 20 bytes to %s\n", ctxt_fname);
     close(fctxt); unlink(ctxt_fname);
     free(bufin);
     return;
   }
+  printf("wrote %d\n",20);
   putint(bufin, numpad0); 	/* cross-platform stability */
   if (write_chunk(fctxt, bufin, 4) != 0) {
     fprintf(stderr,"encrypt_file: error writing last 4 bytes to %s\n", ctxt_fname);
@@ -160,6 +163,7 @@ encrypt_file (const char *ctxt_fname, void *raw_sk, size_t raw_len, int fin)
     free(bufin);
     return;
   }
+  printf("wrote %d\n",4);
   
   close(fctxt);
   free(bufin);

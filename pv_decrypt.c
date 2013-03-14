@@ -60,7 +60,8 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
     return;
   }
   int numread = read(fin, cprev, sk_len); /* read IV */
-  if (numread == -1 || (unsigned)numread < sk_len) {
+  printf("numread: %d\n",numread);
+  if (numread < (int)sk_len) {
     if (numread == -1) perror(0);
     fprintf(stderr,"decrypt_file: ctxt file is too short or read error\n");
     close(fptxt); unlink(ptxt_fname);
@@ -76,7 +77,7 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
   struct aes_ctx aes_s;		/* init AES */
   aes_setkey(&aes_s, sk_aes, sk_len);
 
-  char *bufin = (char*)malloc((sk_len+21) * sizeof(char)); /* buffer to hold chunks of ctxt+21 */
+  char *bufin = (char*)malloc((sk_len+24) * sizeof(char)); /* buffer to hold chunks of ctxt+24 */
   char *bufptxt = (char*)malloc(sk_len * sizeof(char));	   /* buffer to hold chunks of ptxt */
   if (!bufin || !bufptxt) {
     fprintf(stderr, "decrypt_file: Cannot allocate memory\n");
@@ -86,8 +87,10 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
     if (bufin) free(bufin);
     return;
   }
-  numread = read(fin, bufin, 21); /* first long read */
-  if (numread < 21) {
+  numread = read(fin, bufin, sk_len+24); /* first long read */
+  printf("numread: %d\n",numread);
+ 
+  if (numread < 24) {
     if (numread == -1) perror(0);
     fprintf(stderr,"decrypt_file: ctxt file is too short or read error\n");
     aes_clrkey(&aes_s);
@@ -95,14 +98,16 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
     free(cprev); free(bufin); free(bufptxt);
     return;
   }
-  numread = read(fin, bufin+21, sk_len); /* finish first read */
-
+  numread -= 24;
+  /* numread = read(fin, bufin+24, sk_len); /\* finish first read *\/ */
+  /* printf("numread: %d\n",numread); */
+ 
   while ((unsigned)numread == sk_len) { 	/* while we read a full block */
     aes_decrypt(&aes_s, bufptxt, bufin);           /* bufptxt := AES'(bufin[0..sk_len]) */
     xor_buffers(bufptxt, bufptxt, cprev, sk_len);  /* bufptxt := bufptxt ^ cprev */
     memcpy(cprev, bufin, sk_len);		   /* cprev := bufin[0..sk_len] */
     hmac_sha1_update(&hmac_s, cprev, sk_len);	   /* update HMAC with new ctxt */
-    for (i=0; i < 21; i++)                     /* SHIFT bufin[sk_len..sk_len+21] to beginning*/
+    for (i=0; i < 24; i++)                     /* SHIFT bufin[sk_len..sk_len+24] to beginning*/
       bufin[i] = bufin[i+sk_len];
     if (write_chunk(fptxt, bufptxt, sk_len) != 0){ /* writeout ptxt block */
       fprintf(stderr,"decrypt_file: error writing to %s\n",ptxt_fname);
@@ -111,10 +116,12 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
       free(cprev); free(bufin); free(bufptxt);
       return;
     }
-    numread = read(fin, bufin+21, sk_len);        /* read next ctxt */
+    numread = read(fin, bufin+24, sk_len);        /* read next ctxt */
+    printf("numread: %d\n",numread);
   }
-  /* numread == 0 is normal EOF */
-  if (numread != 0) {
+  /* numread == 24-sk_len expected on last block */
+  if (numread != 0) {    /*(24-(int)sk_len) % (int)sk_len) { */
+    printf("expected %d\n",0);
     if (numread == -1) perror("decrypt_file: error reading ctx file");
     else fprintf(stderr,"decrypt_file: ctxt file has bad size (not multiple of block length)\n");
     aes_clrkey(&aes_s);
@@ -124,7 +131,7 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
   }
 
   aes_clrkey(&aes_s);
-  /* bufin[0..21] holds the HMAC + numpad0 and bufptxt holds last block (possible extra 0s) */
+  /* bufin[0..24] holds the HMAC||numpad0 and bufptxt holds last ctxt block (possible extra 0s) */
   hmac_sha1_final(sk_hmac, sk_len, &hmac_s, (u_char*)cprev); /* cprev := computed HMAC */
   for (i=0; (unsigned)i < sk_len; i++)
     if (bufin[i] != cprev[i]) { /* mismatch! */
@@ -138,7 +145,9 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
   u_int32_t numpad0 = getint(bufin+20);
   printf("numpad0= %u\n", numpad0);
   if (numpad0 > 0) {
-    if (ftruncate(fptxt, lseek(fptxt, -numpad0, SEEK_CUR)) != 0) 
+    int sk = lseek(fptxt, -numpad0, SEEK_CUR); /* desired total file length */
+    printf("sk= %d\n",sk);
+    if (ftruncate(fptxt, sk) != 0) 
       perror("decrypt_file: error truncating ptxt file to remove excess 0s");
   }
   

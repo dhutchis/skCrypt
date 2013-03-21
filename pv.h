@@ -16,6 +16,7 @@ const char *getprogname(void);
 void setprogname(const char *n);
 #endif /* HAVE_GETPROGNAME */
 
-#define CCA_STRENGTH 16 /* must be one of 16, 24 or 32; used to set AES keys */
+#define CCA_STRENGTH 24 /* must be one of 16, 24 or 32; used to set AES keys */
+#define BLOCK_LEN 16
 
 #endif /* _PV_H_ */

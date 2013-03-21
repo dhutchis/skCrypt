@@ -72,13 +72,13 @@ encrypt_file (const char *ctxt_fname, void *raw_sk, size_t raw_len, int fin)
 
   /* Now start processing the actual file content using symmetric encryption */
   /* Remember that CBC-mode needs a random IV (Initialization Vector) */
-  char *cprev = (char*)malloc(sk_len * sizeof(char));
+  char *cprev = (char*)malloc(BLOCK_LEN * sizeof(char));
   if (!cprev) {
-    fprintf(stderr, "encrypt_file: Cannot allocate %zu bytes\n",sk_len);
+    fprintf(stderr, "encrypt_file: Cannot allocate %d bytes\n",BLOCK_LEN);
     close(fctxt); unlink(ctxt_fname);
     return;
   }
-  prng_getbytes(cprev, sk_len); /* IV */
+  prng_getbytes(cprev, BLOCK_LEN); /* IV */
 
   struct aes_ctx aes_s;		/* init AES */
   aes_setkey(&aes_s, sk_aes, sk_len);
@@ -87,47 +87,47 @@ encrypt_file (const char *ctxt_fname, void *raw_sk, size_t raw_len, int fin)
   hmac_sha1_init(sk_hmac, sk_len, &hmac_s);
 
   /* output IV as first part of ctxt and pass to HMAC */
-  if (write_chunk(fctxt, cprev, sk_len) != 0) {
+  if (write_chunk(fctxt, cprev, BLOCK_LEN) != 0) {
     fprintf(stderr,"encrypt_file: error writing to %s\n", ctxt_fname);
     aes_clrkey(&aes_s);
     close(fctxt); unlink(ctxt_fname);
     free(cprev);
     return;
   }
-  printf("wrote %d\n",(int)sk_len);
-  hmac_sha1_update(&hmac_s, cprev, sk_len);
+  printf("wrote %d\n",BLOCK_LEN);
+  hmac_sha1_update(&hmac_s, cprev, BLOCK_LEN);
 
-  char *bufin = (char*)malloc(sk_len * sizeof(char)); /* buffer to hold chunks of plaintext */
+  char *bufin = (char*)malloc(BLOCK_LEN * sizeof(char)); /* buffer to hold chunks of plaintext */
   if (!bufin) {
-    fprintf(stderr, "encrypt_file: Cannot allocate %zu bytes\n",sk_len);
+    fprintf(stderr, "encrypt_file: Cannot allocate %d bytes\n",BLOCK_LEN);
     aes_clrkey(&aes_s);
     close(fctxt); unlink(ctxt_fname);
     free(cprev);
     return;
   }
-  int numread = read(fin, bufin, sk_len); /* first ptxt read */
+  int numread = read(fin, bufin, BLOCK_LEN); /* first ptxt read */
   u_int32_t numpad0 = 0u; 	/* number of 0-pad bits */
 
   while (numread > 0) {
-    if ((size_t)numread < sk_len) { 	/* final block; 0-pad */
-      numpad0 = sk_len - numread;
+    if (numread < BLOCK_LEN) { 	/* final block; 0-pad */
+      numpad0 = BLOCK_LEN - numread;
       bzero(bufin+numread, numpad0);
     }
     
-    xor_buffers(bufin, bufin, cprev, sk_len); /* bufin := bufin ^ cprev */
+    xor_buffers(bufin, bufin, cprev, BLOCK_LEN); /* bufin := bufin ^ cprev */
     aes_encrypt(&aes_s, cprev, bufin); /* cprev := AES(bufin) */
 
-    hmac_sha1_update(&hmac_s, cprev, sk_len); /* update HMAC with next ctxt piece */
-    if (write_chunk(fctxt, cprev, sk_len) != 0) {
+    hmac_sha1_update(&hmac_s, cprev, BLOCK_LEN); /* update HMAC with next ctxt piece */
+    if (write_chunk(fctxt, cprev, BLOCK_LEN) != 0) {
       fprintf(stderr,"encrypt_file: error writing to %s\n", ctxt_fname);
       aes_clrkey(&aes_s);
       close(fctxt); unlink(ctxt_fname);
       free(cprev); free(bufin);
       return;
     }
-    printf("wrote %d\n",(int)sk_len);
+    printf("wrote %d\n",BLOCK_LEN);
     
-    numread = read(fin, bufin, sk_len);
+    numread = read(fin, bufin, BLOCK_LEN);
   }
   /* numread == 0 is normal EOF */
   if (numread == -1) {

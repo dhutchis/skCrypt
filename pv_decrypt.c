@@ -53,15 +53,15 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
 
   /* Reading Y */
   /* First, read the IV (Initialization Vector) */
-  char *cprev = (char*)malloc(sk_len * sizeof(char));
+  char *cprev = (char*)malloc(BLOCK_LEN * sizeof(char));
   if (!cprev) {
-    fprintf(stderr, "decrypt_file: Cannot allocate %zu bytes\n",sk_len);
+    fprintf(stderr, "decrypt_file: Cannot allocate %d bytes\n",BLOCK_LEN);
     close(fptxt); unlink(ptxt_fname);
     return;
   }
-  int numread = read(fin, cprev, sk_len); /* read IV */
+  int numread = read(fin, cprev, BLOCK_LEN); /* read IV */
   printf("numread: %d\n",numread);
-  if (numread < (int)sk_len) {
+  if (numread < BLOCK_LEN) {
     if (numread == -1) perror(0);
     fprintf(stderr,"decrypt_file: ctxt file is too short or read error\n");
     close(fptxt); unlink(ptxt_fname);
@@ -72,13 +72,13 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
   /* compute the HMAC-SHA1 as you go */
   struct sha1_ctx hmac_s;	/* init HMAC */
   hmac_sha1_init(sk_hmac, sk_len, &hmac_s);
-  hmac_sha1_update(&hmac_s, cprev, sk_len);
+  hmac_sha1_update(&hmac_s, cprev, BLOCK_LEN);
   
   struct aes_ctx aes_s;		/* init AES */
   aes_setkey(&aes_s, sk_aes, sk_len);
 
-  char *bufin = (char*)malloc((sk_len+24) * sizeof(char)); /* buffer to hold chunks of ctxt+24 */
-  char *bufptxt = (char*)malloc(sk_len * sizeof(char));	   /* buffer to hold chunks of ptxt */
+  char *bufin = (char*)malloc((BLOCK_LEN+24) * sizeof(char)); /* buffer to hold chunks of ctxt+24 */
+  char *bufptxt = (char*)malloc(BLOCK_LEN * sizeof(char));	   /* buffer to hold chunks of ptxt */
   if (!bufin || !bufptxt) {
     fprintf(stderr, "decrypt_file: Cannot allocate memory\n");
     aes_clrkey(&aes_s);
@@ -87,7 +87,7 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
     if (bufin) free(bufin);
     return;
   }
-  numread = read(fin, bufin, sk_len+24); /* first long read */
+  numread = read(fin, bufin, BLOCK_LEN+24); /* first long read */
   printf("numread: %d\n",numread); 
   if (numread < 24) {
     if (numread == -1) perror(0);
@@ -99,21 +99,21 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
   }
   numread -= 24;
  
-  while ((unsigned)numread == sk_len) { 	   /* while we read a full block */
-    aes_decrypt(&aes_s, bufptxt, bufin);           /* bufptxt := AES'(bufin[0..sk_len]) */
-    xor_buffers(bufptxt, bufptxt, cprev, sk_len);  /* bufptxt := bufptxt ^ cprev */
-    memcpy(cprev, bufin, sk_len);		   /* cprev := bufin[0..sk_len] */
-    hmac_sha1_update(&hmac_s, cprev, sk_len);	   /* update HMAC with new ctxt */
-    for (i=0; i < 24; i++)                         /* SHIFT bufin[sk_len..sk_len+24] to beginning*/
-      bufin[i] = bufin[i+sk_len];
-    if (write_chunk(fptxt, bufptxt, sk_len) != 0){ /* writeout ptxt block */
+  while (numread == BLOCK_LEN) {                   /* while we read a full block */
+    aes_decrypt(&aes_s, bufptxt, bufin);           /* bufptxt := AES'(bufin[0..BLOCK_LEN]) */
+    xor_buffers(bufptxt, bufptxt, cprev, BLOCK_LEN);  /* bufptxt := bufptxt ^ cprev */
+    memcpy(cprev, bufin, BLOCK_LEN);		   /* cprev := bufin[0..BLOCK_LEN] */
+    hmac_sha1_update(&hmac_s, cprev, BLOCK_LEN);   /* update HMAC with new ctxt */
+    for (i=0; i < 24; i++)                         /* SHIFT bufin[BLOCK_LEN..BLOCK_LEN+24] to beginning*/
+      bufin[i] = bufin[i+BLOCK_LEN];
+    if (write_chunk(fptxt, bufptxt, BLOCK_LEN) != 0){ /* writeout ptxt block */
       fprintf(stderr,"decrypt_file: error writing to %s\n",ptxt_fname);
       aes_clrkey(&aes_s);
       close(fptxt); unlink(ptxt_fname);
       free(cprev); free(bufin); free(bufptxt);
       return;
     }
-    numread = read(fin, bufin+24, sk_len);         /* read next ctxt */
+    numread = read(fin, bufin+24, BLOCK_LEN);         /* read next ctxt */
     printf("numread: %d\n",numread);
   }
   /* numread == 0 expected on last block */
@@ -129,7 +129,7 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
 
   aes_clrkey(&aes_s);
   /* bufin[0..24] holds the HMAC||numpad0 and bufptxt holds last ctxt block (possible extra 0s) */
-  cprev = (char*)realloc(cprev, 20); /* ensure bufin has 20 bytes capacity */
+  cprev = (char*)realloc(cprev, 20); /* ensure cprev has 20 bytes capacity */
   if (!cprev) {
     fprintf(stderr,"decrypt_file: failed to reallocate 20 bytes\n");
     close(fptxt); unlink(ptxt_fname);

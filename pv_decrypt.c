@@ -60,7 +60,7 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
     return;
   }
   int numread = read(fin, cprev, BLOCK_LEN); /* read IV */
-  printf("numread: %d\n",numread);
+  /* printf("numread: %d\n",numread); */
   if (numread < BLOCK_LEN) {
     if (numread == -1) perror(0);
     fprintf(stderr,"decrypt_file: ctxt file is too short or read error\n");
@@ -88,7 +88,7 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
     return;
   }
   numread = read(fin, bufin, BLOCK_LEN+24); /* first long read */
-  printf("numread: %d\n",numread); 
+  /* printf("numread: %d\n",numread);  */
   if (numread < 24) {
     if (numread == -1) perror(0);
     fprintf(stderr,"decrypt_file: ctxt file is too short or read error\n");
@@ -114,7 +114,7 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
       return;
     }
     numread = read(fin, bufin+24, BLOCK_LEN);         /* read next ctxt */
-    printf("numread: %d\n",numread);
+    /* printf("numread: %d\n",numread); */
   }
   /* numread == 0 expected on last block */
   if (numread != 0) {
@@ -147,10 +147,10 @@ decrypt_file (const char *ptxt_fname, void *raw_sk, size_t raw_len, int fin)
   
   /* now let's fix those last 0s */
   u_int32_t numpad0 = getint(bufin+20);
-  printf("numpad0= %u\n", numpad0);
+  /* printf("numpad0= %u\n", numpad0); */
   if (numpad0 > 0) {
     int sk = lseek(fptxt, -numpad0, SEEK_CUR); /* desired total file length */
-    printf("sk= %d\n",sk);
+    /* printf("sk= %d\n",sk); */
     if (ftruncate(fptxt, sk) != 0) 
       perror("decrypt_file: error truncating ptxt file to remove excess 0s");
   }
@@ -234,7 +234,7 @@ main (int argc, char **argv)
     }
     close (fdsk);
 
-    printf("raw_len: %zu\n",raw_len);
+    /* printf("raw_len: %zu\n",raw_len); */
     /* Enough setting up---let's get to the crypto... */
     decrypt_file (argv[3], raw_sk, raw_len, fdctxt);    
 

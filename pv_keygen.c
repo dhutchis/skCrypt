@@ -12,12 +12,10 @@ write_skfile (const char *skfname, void *raw_sk, size_t raw_sklen)
   /* armor the raw symmetric key in raw_sk using armor64 */
   s = armor64(raw_sk, raw_sklen); /* ensure bzero & free s (newly allocated) */
 
-
   /* now let's write the armored symmetric key to skfname */
 
   if ((fdsk = open (skfname, O_WRONLY|O_TRUNC|O_CREAT, 0600)) == -1) {
     perror (getprogname ());
-    
 
     /* scrub the buffer that's holding the key before exiting */
     bzero(s, strlen(s)); 	/* scrub armored sk */
@@ -44,8 +42,7 @@ write_skfile (const char *skfname, void *raw_sk, size_t raw_sklen)
       
       /* scrub the buffer that's holding the key before exiting */
       bzero(raw_sk, raw_sklen);	/* scrub original buffer */
-    
-      
+          
       exit (-1);
     }
   }

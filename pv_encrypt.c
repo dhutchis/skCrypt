@@ -94,7 +94,7 @@ encrypt_file (const char *ctxt_fname, void *raw_sk, size_t raw_len, int fin)
     free(cprev);
     return;
   }
-  printf("wrote %d\n",BLOCK_LEN);
+  /* printf("wrote %d\n",BLOCK_LEN); */
   hmac_sha1_update(&hmac_s, cprev, BLOCK_LEN);
 
   char *bufin = (char*)malloc(BLOCK_LEN * sizeof(char)); /* buffer to hold chunks of plaintext */
@@ -125,7 +125,7 @@ encrypt_file (const char *ctxt_fname, void *raw_sk, size_t raw_len, int fin)
       free(cprev); free(bufin);
       return;
     }
-    printf("wrote %d\n",BLOCK_LEN);
+    /* printf("wrote %d\n",BLOCK_LEN); */
     
     numread = read(fin, bufin, BLOCK_LEN);
   }
@@ -155,16 +155,16 @@ encrypt_file (const char *ctxt_fname, void *raw_sk, size_t raw_len, int fin)
     free(bufin);
     return;
   }
-  printf("wrote %d\n",20);
+  /* printf("wrote %d\n",20); */
   putint(bufin, numpad0); 	/* cross-platform stability */
-  printf("numpad0: %u\n",numpad0);
+  /* printf("numpad0: %u\n",numpad0); */
   if (write_chunk(fctxt, bufin, 4) != 0) {
     fprintf(stderr,"encrypt_file: error writing last 4 bytes to %s\n", ctxt_fname);
     close(fctxt); unlink(ctxt_fname);
     free(bufin);
     return;
   }
-  printf("wrote %d\n",4);
+  /* printf("wrote %d\n",4); */
   
   close(fctxt);
   free(bufin);
@@ -218,7 +218,7 @@ main (int argc, char **argv)
     close (fdsk);
 
     /* Enough setting up---let's get to the crypto... */
-    printf("raw_len: %zu\n",raw_len);
+    /* printf("raw_len: %zu\n",raw_len); */
     encrypt_file (argv[3], raw_sk, raw_len, fdptxt);    
 
     /* scrub the buffer that's holding the key before exiting */

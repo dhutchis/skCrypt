@@ -1,0 +1,8 @@
+Script started on Thu Mar 21 17:37:21 2013
+$ ./pv_key	gen myk
+$ ./pv_encrypt myk bigfile.txt ctxt
+$ ./pv_decrypt myk x ctxt output
+$ diff output bigfile.txt
+$ 
+
+Script done on Thu Mar 21 17:38:30 2013

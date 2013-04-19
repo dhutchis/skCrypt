@@ -3,6 +3,7 @@ CCA-Secure Symmetric Key Encryption scheme
 Dylan Hutchison
 CS 579 Crypto
 Lab 1 due 5 April 2013
+http://www.cs.stevens.edu/~nicolosi/classes/13sp-cs579/lab1/lab1.html
 
 Please see 'typescript' for a run-through test of the program.
 
